@@ -1,7 +1,7 @@
 # coding: utf-8
 
 import sys, os, time, gc, json
-from torch.optim import Adam
+from torch.optim import AdamW
 
 install_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(install_path)
@@ -48,7 +48,7 @@ if args.testing:
 def set_optimizer(model, args):
     params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
     grouped_params = [{'params': list(set([p for n, p in params]))}]
-    optimizer = Adam(grouped_params, lr=args.lr)
+    optimizer = AdamW(grouped_params, lr=args.lr)
     return optimizer
 
 
