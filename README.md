@@ -11,7 +11,7 @@ You can customize your own scripts.
 
 ## Code interpretation
 
-### Each Example in the train set
+### An Example in the train set
 
 #### Original Data
 
