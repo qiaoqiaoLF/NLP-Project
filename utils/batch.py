@@ -3,6 +3,7 @@ import torch
 
 
 def from_example_list(args, ex_list, device='cpu', train=True):
+    # breakpoint()
     ex_list = sorted(ex_list, key=lambda x: len(x.input_idx), reverse=True)
     batch = Batch(ex_list, device)
     pad_idx = args.pad_idx
@@ -29,7 +30,7 @@ def from_example_list(args, ex_list, device='cpu', train=True):
         batch.tag_ids = None
         tag_mask = [[1] * len(ex.input_idx) + [0] * (max_len - len(ex.input_idx)) for ex in ex_list]
         batch.tag_mask = torch.tensor(tag_mask, dtype=torch.float, device=device)
-
+    # breakpoint()
     return batch
 
 

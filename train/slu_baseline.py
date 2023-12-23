@@ -21,10 +21,15 @@ print("Initialization finished ...")
 print("Random seed is set to %d" % (args.seed))
 print("Use GPU with index %s" % (args.device) if args.device >= 0 else "Use CPU as target torch device")
 
+# Get the path of train set and dev set
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
+
+# Set the evaluator(Predefined), set the vocab from train set: data/train.json, set the label(tag) vocab from data/ontology.json
 Example.configuration(args.dataroot, train_path=train_path, word2vec_path=args.word2vec_path)
+
+# Get the train set and dev set.
 train_dataset = Example.load_dataset(train_path)
 dev_dataset = Example.load_dataset(dev_path)
 print("Load dataset and database finished, cost %.4fs ..." % (time.time() - start_time))
@@ -35,7 +40,7 @@ args.pad_idx = Example.word_vocab[PAD]
 args.num_tags = Example.label_vocab.num_tags
 args.tag_pad_idx = Example.label_vocab.convert_tag_to_idx(PAD)
 
-
+#load the model and word2vec embeddings
 model = SLUTagging(args).to(device)
 Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
 
@@ -58,6 +63,7 @@ def decode(choice):
     dataset = train_dataset if choice == 'train' else dev_dataset
     predictions, labels = [], []
     total_loss, count = 0, 0
+    # breakpoint()
     with torch.no_grad():
         for i in range(0, len(dataset), args.batch_size):
             cur_dataset = dataset[i: i + args.batch_size]
@@ -97,7 +103,7 @@ def predict():
             ptr += 1
     json.dump(test_json, open(os.path.join(args.dataroot, 'prediction.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
 
-
+# Nothing special. Vanilla Training and Testing Loop
 if not args.testing:
     num_training_steps = ((len(train_dataset) + args.batch_size - 1) // args.batch_size) * args.max_epoch
     print('Total training steps: %d' % (num_training_steps))
