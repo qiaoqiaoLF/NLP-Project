@@ -82,7 +82,7 @@ self.tag_id:  [32, 33, 33]
 
 #### In a batch together with other examples
 
-(IN REAL CASES, EXAMPLES MAY BE SHUFFLED)
+(IN REAL CASES, EXAMPLES MAY BE SHUFFLED)  
 (The examples within a batch is sorted according to their length to accelerate rnn.)
 
 Batch:
@@ -167,8 +167,8 @@ IT IS EASY YET IMPORTANT. PLEASE CHECK IT OUT YOURSELF.
 
 #### Decode Process
 
-From input_ids (batch) to predictions.
-IT IS EASY. PLEASE CHECK IT OUT YOURSELF.
+From input_ids (batch) to predictions.  
+IT IS EASY YET IMPORTRANT. PLEASE CHECK IT OUT YOURSELF.
 
 ### label_vocab
 
