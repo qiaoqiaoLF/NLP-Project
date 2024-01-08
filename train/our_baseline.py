@@ -1,17 +1,17 @@
 # coding: utf-8
 
 import sys, os, time, gc, json
-from torch.optim import AdamW
+from torch.optim import Adam
 
 install_path = os.path.abspath(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(install_path)
 
 from utils.args import init_args
 from utils.initialization import *
-from utils.example import Example
-from utils.batch import from_example_list
+from utils.example_new import Example
+from utils.batch_new import from_example_list
 from utils.vocab import PAD
-from model.slu_baseline_tagging import SLUTagging
+from model.history_aware_tagging import SLUTagging
 
 # initialization params, output path, logger, random seed and torch.device
 args = init_args(sys.argv[1:])
@@ -21,39 +21,62 @@ print("Initialization finished ...")
 print("Random seed is set to %d" % (args.seed))
 print("Use GPU with index %s" % (args.device) if args.device >= 0 else "Use CPU as target torch device")
 
-# Get the path of train set and dev set
 start_time = time.time()
 train_path = os.path.join(args.dataroot, 'train.json')
 dev_path = os.path.join(args.dataroot, 'development.json')
-
-# Set the evaluator(Predefined), set the vocab from train set: data/train.json, set the label(tag) vocab from data/ontology.json
 Example.configuration(args.dataroot, train_path=train_path, word2vec_path=args.word2vec_path)
-
-# Get the train set and dev set.
 train_dataset = Example.load_dataset(train_path)
 dev_dataset = Example.load_dataset(dev_path)
 print("Load dataset and database finished, cost %.4fs ..." % (time.time() - start_time))
 print("Dataset size: train -> %d ; dev -> %d" % (len(train_dataset), len(dev_dataset)))
 
+'''
+print(train_dataset[0].ex['manual_transcript'])
+print(train_dataset[0].ex['curr_len'])
+print(train_dataset[0].ex['manual_transcript'][-train_dataset[0].ex['curr_len']:])
+print(train_dataset[1].ex['manual_transcript'])
+print(train_dataset[1].ex['manual_transcript'][-train_dataset[1].ex['curr_len']:])
+print(train_dataset[1].ex['curr_len'])
+print(train_dataset[2].ex['manual_transcript'])
+print(train_dataset[2].ex['curr_len'])
+print(train_dataset[2].ex['manual_transcript'][-train_dataset[2].ex['curr_len']:])
+exit()
+'''
 args.vocab_size = Example.word_vocab.vocab_size
 args.pad_idx = Example.word_vocab[PAD]
 args.num_tags = Example.label_vocab.num_tags
 args.tag_pad_idx = Example.label_vocab.convert_tag_to_idx(PAD)
 
-#load the model and word2vec embeddings
-model = SLUTagging(args).to(device)
-Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
+
+model = SLUTagging(args, Example.word_vocab).to(device)
+#Example.word2vec.load_embeddings(model.word_embed, Example.word_vocab, device=device)
 
 if args.testing:
-    check_point = torch.load(open(f'ckpt/{args.run_name}.bin', 'rb'), map_location=device)
+    check_point = torch.load(open('model.bin', 'rb'), map_location=device)
     model.load_state_dict(check_point['model'])
     print("Load saved model from root path")
 
 
 def set_optimizer(model, args):
-    params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
-    grouped_params = [{'params': list(set([p for n, p in params]))}]
-    optimizer = AdamW(grouped_params, lr=args.lr)
+    #params = [(n, p) for n, p in model.named_parameters() if p.requires_grad]
+    #grouped_params = [{'params': list(set([p for n, p in params]))}]
+    #optimizer = Adam(grouped_params, lr=args.lr)
+    bert_param = []
+    other_param = []
+    for k, v in model.named_parameters():
+        if 'model' in k:
+            bert_param.append(v)
+            
+        else:
+            other_param.append(v)
+            
+
+    optimizer = Adam(
+            [
+                {"params": bert_param, "lr": args.lr*0.9},
+                {"params": other_param, "lr": args.lr}
+            ],
+        )
     return optimizer
 
 
@@ -63,7 +86,6 @@ def decode(choice):
     dataset = train_dataset if choice == 'train' else dev_dataset
     predictions, labels = [], []
     total_loss, count = 0, 0
-    # breakpoint()
     with torch.no_grad():
         for i in range(0, len(dataset), args.batch_size):
             cur_dataset = dataset[i: i + args.batch_size]
@@ -103,20 +125,48 @@ def predict():
             ptr += 1
     json.dump(test_json, open(os.path.join(args.dataroot, 'prediction.json'), 'w',encoding='utf-8'), indent=4, ensure_ascii=False)
 
-# Nothing special. Vanilla Training and Testing Loop
+
 if not args.testing:
     num_training_steps = ((len(train_dataset) + args.batch_size - 1) // args.batch_size) * args.max_epoch
     print('Total training steps: %d' % (num_training_steps))
     optimizer = set_optimizer(model, args)
     nsamples, best_result = len(train_dataset), {'dev_acc': 0., 'dev_f1': 0.}
     train_index, step_size = np.arange(nsamples), args.batch_size
+    raw_index = np.arange(nsamples)
     print('Start training ......')
     for i in range(args.max_epoch):
         start_time = time.time()
         epoch_loss = 0
         np.random.shuffle(train_index)
+        #count = np.zeros(30, dtype=int)
+        #train_index = sorted(train_index, key=lambda x: train_dataset[x].ex['utt_id'], reverse=False)
+        
         model.train()
         count = 0
+        j = 0
+        '''
+        while j < nsamples:
+            start_id = train_dataset[train_index[j]].ex['utt_id']
+            for batch_size in range(step_size):
+                if j + batch_size >=nsamples:
+                    break
+                end_id = train_dataset[train_index[j + batch_size]].ex['utt_id']
+                if end_id != start_id:
+                    break
+            #print(batch_size)
+            cur_dataset = [train_dataset[k] for k in train_index[j: j + batch_size]]
+            j = j + batch_size
+
+            current_batch = from_example_list(args, cur_dataset, device, train=True)
+            output, loss = model(current_batch)
+            epoch_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            count += 1
+            
+            
+        '''
         for j in range(0, nsamples, step_size):
             cur_dataset = [train_dataset[k] for k in train_index[j: j + step_size]]
             current_batch = from_example_list(args, cur_dataset, device, train=True)
@@ -126,6 +176,7 @@ if not args.testing:
             optimizer.step()
             optimizer.zero_grad()
             count += 1
+        
         print('Training: \tEpoch: %d\tTime: %.4f\tTraining Loss: %.4f' % (i, time.time() - start_time, epoch_loss / count))
         torch.cuda.empty_cache()
         gc.collect()
