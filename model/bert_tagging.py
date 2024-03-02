@@ -42,6 +42,9 @@ class SLUTagging(nn.Module):
                     token = self.tokenizer.encode(word,add_special_tokens=False)
                     assert len(token) == 1 
                     new_input_ids[i,j] = token[0]
+
+
+      
         
         attention_mask = new_input_ids != self.tokenizer.pad_token_id
         output = self.model(input_ids = new_input_ids,attention_mask = attention_mask )
